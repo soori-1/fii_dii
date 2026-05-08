@@ -13,7 +13,7 @@ st.markdown("Advanced structural tracking of FII & DII equity flows (2014 - Pres
 @st.cache_data(ttl=3600)
 def load_data():
     # 1. Load FII/DII CSV
-    df = pd.read_csv('FII_DII_Daily_Data_2014_to_Today.csv', encoding='utf-8-sig')
+    df = pd.read_csv('fii_dii_checkpoint.csv', encoding='utf-8-sig')
     df.columns = df.columns.str.strip().str.upper()
     df['DATE'] = pd.to_datetime(df['DATE'], errors='coerce')
     df = df.dropna(subset=['DATE'])
