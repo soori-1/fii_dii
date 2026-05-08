@@ -11,7 +11,7 @@ st.subheader("FII & DII Net Inflow Analysis")
 # Load Data
 @st.cache_data(ttl=3600) # Refreshes every hour
 def load_data():
-    df = pd.read_csv('FII_DII_Daily_Data_2014_to_Today.csv')
+    df = pd.read_csv('fii_dii_checkpoint.csv')
     
     # Convert dates and clean numeric columns
     df['Date'] = pd.to_datetime(df['Date'])
