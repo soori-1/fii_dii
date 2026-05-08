@@ -2,20 +2,20 @@ name: Daily FII DII Scrape
 
 on:
   schedule:
-    - cron: '30 14 * * *' # Runs at 8:00 PM IST daily
-  workflow_dispatch: # Allows manual run
+    - cron: '30 14 * * *' 
+  workflow_dispatch: 
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4 # Updated from v3
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5 # Updated from v4
         with:
-          python-version: '3.9'
+          python-version: '3.11' # Using a more modern Python for 2026
 
       - name: Install dependencies
         run: |
@@ -23,7 +23,7 @@ jobs:
           playwright install chromium
 
       - name: Run Scraper
-        run: python scraper.py # Ensure your scraper filename matches
+        run: python scraper.py 
 
       - name: Commit and Push changes
         run: |
