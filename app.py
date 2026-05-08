@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import yfinance as yf
 import numpy as np
 
 # --- PAGE CONFIG ---
@@ -15,7 +13,7 @@ st.markdown("Advanced structural tracking of FII & DII equity flows (2014 - Pres
 @st.cache_data(ttl=3600)
 def load_data():
     # 1. Load FII/DII CSV
-    df = pd.read_csv('fii_dii_checkpoint.csv', encoding='utf-8-sig')
+    df = pd.read_csv('FII_DII_Daily_Data_2014_to_Today.csv', encoding='utf-8-sig')
     df.columns = df.columns.str.strip().str.upper()
     df['DATE'] = pd.to_datetime(df['DATE'], errors='coerce')
     df = df.dropna(subset=['DATE'])
@@ -33,10 +31,7 @@ def load_data():
     # Moving Averages
     df['FII_SMA_20'] = df['FII_NET_PURCHASE_SALES'].rolling(window=20).mean()
     df['DII_SMA_20'] = df['DII_NET_PURCHASE_SALES'].rolling(window=20).mean()
-    
-    # Cumulative "Dry Powder" (Total accumulated flow since 2014)
-    df['CUMULATIVE_FII'] = df['FII_NET_PURCHASE_SALES'].cumsum()
-    df['CUMULATIVE_DII'] = df['DII_NET_PURCHASE_SALES'].cumsum()
+    df['TOTAL_SMA_20'] = df['TOTAL_NET'].rolling(window=20).mean()
     
     # Z-Score (Standard Deviation from 60-day mean) to find extreme panic/euphoria
     fii_mean_60 = df['FII_NET_PURCHASE_SALES'].rolling(window=60).mean()
@@ -49,21 +44,6 @@ def load_data():
         abs(df['DII_NET_PURCHASE_SALES'] / df['FII_NET_PURCHASE_SALES']), 
         np.nan
     )
-
-    # 3. Fetch Nifty 50 Data automatically
-    try:
-        start_date = df['DATE'].min().strftime('%Y-%m-%d')
-        end_date = df['DATE'].max().strftime('%Y-%m-%d')
-        nifty = yf.download('^NSEI', start=start_date, end=end_date, progress=False)
-        nifty = nifty.reset_index()
-        nifty['Date'] = pd.to_datetime(nifty['Date']).dt.tz_localize(None)
-        
-        # Merge Nifty data with our Flow data
-        df = pd.merge(df, nifty[['Date', 'Close']], left_on='DATE', right_on='Date', how='left')
-        df.rename(columns={'Close': 'NIFTY_50'}, inplace=True)
-    except Exception as e:
-        st.warning(f"Could not load Nifty 50 data: {e}")
-        df['NIFTY_50'] = np.nan
 
     return df
 
@@ -79,15 +59,11 @@ try:
     dii_net = latest['DII_NET_PURCHASE_SALES']
     total_net = latest['TOTAL_NET']
     
-    col1, col2, col3, col4 = st.columns(4)
+    # Reduced to 3 columns since we removed Nifty 50
+    col1, col2, col3 = st.columns(3)
     col1.metric("FII Net Flow", f"₹{fii_net:,.2f} Cr")
     col2.metric("DII Net Flow", f"₹{dii_net:,.2f} Cr")
     col3.metric("Total Net Inflow", f"₹{total_net:,.2f} Cr")
-    
-    if pd.notna(latest['NIFTY_50']):
-        col4.metric("Nifty 50 (Close)", f"{float(latest['NIFTY_50']):,.2f}")
-    else:
-        col4.metric("Nifty 50", "Data Pending")
 
     st.markdown("---")
 
@@ -112,7 +88,8 @@ try:
         filtered_data = data
 
     # --- TABS FOR ORGANIZATION ---
-    tab1, tab2, tab3 = st.tabs(["📉 Trend & Averages", "🏛️ Macro Context (Cumulative & Nifty)", "⚡ Statistical Extremes (Z-Score)"])
+    # Down to just two tabs
+    tab1, tab2 = st.tabs(["📉 Trend & Averages", "⚡ Statistical Extremes (Z-Score)"])
 
     # === TAB 1: TRENDS & AVERAGES ===
     with tab1:
@@ -131,48 +108,11 @@ try:
 
         st.plotly_chart(create_trend_chart(filtered_data, 'FII_NET_PURCHASE_SALES', 'FII_SMA_20', 'FII Flows vs 20-Day SMA', '#00f2ff'), use_container_width=True)
         st.plotly_chart(create_trend_chart(filtered_data, 'DII_NET_PURCHASE_SALES', 'DII_SMA_20', 'DII Flows vs 20-Day SMA', '#ff4b4b'), use_container_width=True)
+        st.plotly_chart(create_trend_chart(filtered_data, 'TOTAL_NET', 'TOTAL_SMA_20', 'Combined Total Net Flows vs 20-Day SMA', '#00ff88'), use_container_width=True)
 
 
-    # === TAB 2: MACRO CONTEXT ===
+    # === TAB 2: STATISTICAL EXTREMES ===
     with tab2:
-        st.markdown("#### Cumulative Flow vs. Nifty 50 Correlation")
-        st.caption("Tracks the 'inventory' of institutional money. Divergences between Cumulative FII flow and Nifty 50 price often signal structural market shifts.")
-        
-        fig_macro = make_subplots(specs=[[{"secondary_y": True}]])
-        
-        # Cumulative FII (Area Chart)
-        fig_macro.add_trace(go.Scatter(
-            x=filtered_data['DATE'], y=filtered_data['CUMULATIVE_FII'], 
-            name="Cumulative FII", fill='tozeroy', line=dict(color='#00f2ff', width=1), opacity=0.3
-        ), secondary_y=False)
-        
-        # Cumulative DII (Area Chart)
-        fig_macro.add_trace(go.Scatter(
-            x=filtered_data['DATE'], y=filtered_data['CUMULATIVE_DII'], 
-            name="Cumulative DII", fill='tozeroy', line=dict(color='#ff4b4b', width=1), opacity=0.3
-        ), secondary_y=False)
-
-        # Nifty 50 (Line Chart on Secondary Axis)
-        if 'NIFTY_50' in filtered_data.columns and not filtered_data['NIFTY_50'].isna().all():
-            # Flatten the multi-index column if yfinance returned one
-            nifty_series = filtered_data['NIFTY_50']
-            if isinstance(nifty_series, pd.DataFrame):
-                nifty_series = nifty_series.iloc[:, 0]
-                
-            fig_macro.add_trace(go.Scatter(
-                x=filtered_data['DATE'], y=nifty_series, 
-                name="Nifty 50", mode='lines', line=dict(color='#00ff88', width=2)
-            ), secondary_y=True)
-
-        fig_macro.update_layout(title="Structural Flow Correlation", template="plotly_dark", height=500, hovermode="x unified")
-        fig_macro.update_yaxes(title_text="Cumulative Flow (₹ Cr)", secondary_y=False)
-        fig_macro.update_yaxes(title_text="Nifty 50 Price", secondary_y=True)
-        
-        st.plotly_chart(fig_macro, use_container_width=True)
-
-
-    # === TAB 3: STATISTICAL EXTREMES ===
-    with tab3:
         st.markdown("#### Flow Extremes & Market Absorption")
         st.caption("A Z-Score of > 2 or < -2 indicates a statistically extreme buying/selling day. Absorption ratio > 1 means DIIs bought more than FIIs sold.")
         
