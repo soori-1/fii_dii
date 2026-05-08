@@ -6,7 +6,7 @@ import numpy as np
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Institutional Flow Analytics", layout="wide", page_icon="📈")
 
-st.title("📈 Institutional Flow & Macro Analytics")
+st.title("FII and DII tracker")
 st.markdown("Advanced structural tracking of FII & DII equity flows (2014 - Present)")
 
 # --- DATA LOADER ---
