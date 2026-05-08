@@ -22,7 +22,7 @@ def load_data():
     # Calculate Total Net Inflow
     # $$\text{Total Net Inflow} = \text{FII Net} + \text{DII Net}$$
     df['Total_Net'] = df['FII_Net_Purchase_Sales'] + df['DII_Net_Purchase_Sales']
-    return df.sort_values('Date')
+    return df.sort_values('DATE')
 
 try:
     data = load_data()
@@ -38,7 +38,7 @@ try:
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=data['DATE'], y=data['FII_Net_Purchase_Sales'], name="FII Net", line=dict(color='#00f2ff')))
     fig.add_trace(go.Scatter(x=data['DATE'], y=data['DII_Net_Purchase_Sales'], name="DII Net", line=dict(color='#ff4b4b')))
-    fig.add_trace(go.Bar(x=data['Date'], y=data['Total_Net'], name="Total Net Inflow", opacity=0.3))
+    fig.add_trace(go.Bar(x=data['DATE'], y=data['Total_Net'], name="Total Net Inflow", opacity=0.3))
 
     fig.update_layout(title="Daily Institutional Flows", xaxis_title="Year", yaxis_title="Amount (Cr)", hovermode="x unified")
     st.plotly_chart(fig, use_container_width=True)
