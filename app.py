@@ -2,35 +2,31 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 
-# Page Config
 st.set_page_config(page_title="FII/DII Flow Tracker", layout="wide")
 
 st.title("📊 Institutional Equity Flows (2014 - Present)")
-st.subheader("FII & DII Net Inflow Analysis")
 
-# Load Data
 @st.cache_data(ttl=3600)
 def load_data():
-    # 1. Load with encoding fix
-    df = pd.read_csv('fii_dii_checkpoint.csv', encoding='cp1252')
+    # 'utf-8-sig' handles the hidden characters (BOM) often found in Excel-made CSVs
+    # If this fails, try 'cp1252'
+    df = pd.read_csv('fii_dii_checckpoint.csv', encoding='utf-8-sig')
     
-    # 2. Clean Column Names (The "Secret Sauce")
-    # This turns '  Date ' or 'date' into 'DATE'
+    # Standardize column names: Strip spaces and make Uppercase
     df.columns = df.columns.str.strip().str.upper()
     
-    # 3. Convert Date
-    # We now look for 'DATE' because we capitalized everything above
-    df['DATE'] = pd.to_datetime(df['DATE'])
+    # Convert DATE column
+    df['DATE'] = pd.to_datetime(df['DATE'], errors='coerce')
     
-    # 4. Clean Numeric Columns
-    # Adjust names here to match the capitalized version
-    cols_to_fix = ['FII_NET_PURCHASE_SALES', 'DII_NET_PURCHASE_SALES']
-    for col in cols_to_fix:
+    # Drop rows where DATE couldn't be parsed
+    df = df.dropna(subset=['DATE'])
+
+    # Clean the numeric columns (Removing commas like -3,621.60)
+    # We use the exact names from your screenshot (now uppercase)
+    cols = ['FII_NET_PURCHASE_SALES', 'DII_NET_PURCHASE_SALES', 'TOTAL_NET']
+    for col in cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
-    
-    # 5. Calculate Total
-    df['TOTAL_NET'] = df['FII_NET_PURCHASE_SALES'] + df['DII_NET_PURCHASE_SALES']
     
     return df.sort_values('DATE')
 
@@ -40,22 +36,55 @@ try:
     # --- Metrics Section ---
     latest = data.iloc[-1]
     m1, m2, m3 = st.columns(3)
-    m1.metric("Latest FII Net", f"₹{latest['FII_Net_Purchase_Sales']:.2f} Cr")
-    m2.metric("Latest DII Net", f"₹{latest['DII_Net_Purchase_Sales']:.2f} Cr")
-    m3.metric("Total Net Flow", f"₹{latest['Total_Net']:.2f} Cr")
+    # We use the clean uppercase names here
+    m1.metric("Latest FII Net", f"₹{latest['FII_NET_PURCHASE_SALES']:,.2f} Cr")
+    m2.metric("Latest DII Net", f"₹{latest['DII_NET_PURCHASE_SALES']:,.2f} Cr")
+    m3.metric("Total Net Flow", f"₹{latest['TOTAL_NET']:,.2f} Cr")
 
     # --- Charts ---
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=data['DATE'], y=data['FII_Net_Purchase_Sales'], name="FII Net", line=dict(color='#00f2ff')))
-    fig.add_trace(go.Scatter(x=data['DATE'], y=data['DII_Net_Purchase_Sales'], name="DII Net", line=dict(color='#ff4b4b')))
-    fig.add_trace(go.Bar(x=data['DATE'], y=data['Total_Net'], name="Total Net Inflow", opacity=0.3))
+    
+    # FII Line
+    fig.add_trace(go.Scatter(
+        x=data['DATE'], 
+        y=data['FII_NET_PURCHASE_SALES'], 
+        name="FII Net", 
+        line=dict(color='#00f2ff', width=1.5)
+    ))
+    
+    # DII Line
+    fig.add_trace(go.Scatter(
+        x=data['DATE'], 
+        y=data['DII_NET_PURCHASE_SALES'], 
+        name="DII Net", 
+        line=dict(color='#ff4b4b', width=1.5)
+    ))
+    
+    # Total Net Bars
+    fig.add_trace(go.Bar(
+        x=data['DATE'], 
+        y=data['TOTAL_NET'], 
+        name="Total Net Inflow", 
+        marker_color='gray',
+        opacity=0.3
+    ))
 
-    fig.update_layout(title="Daily Institutional Flows", xaxis_title="Year", yaxis_title="Amount (Cr)", hovermode="x unified")
+    fig.update_layout(
+        title="Daily Institutional Flows",
+        xaxis_title="Timeline",
+        yaxis_title="Amount (₹ Crores)",
+        hovermode="x unified",
+        template="plotly_dark"
+    )
+    
     st.plotly_chart(fig, use_container_width=True)
 
-    # Show Raw Data
-    if st.checkbox("Show Raw Data"):
-        st.dataframe(data.tail(100), use_container_width=True)
+    # Raw Data View
+    with st.expander("View Raw Data Table"):
+        st.dataframe(data.sort_values('DATE', ascending=False), use_container_width=True)
 
 except Exception as e:
-    st.error(f"Waiting for data file... Ensure the CSV is in the repository. Error: {e}")
+    st.error(f"Error loading data: {e}")
+    # This "Debug" section will help us see if the file is loaded but headers are wrong
+    if 'df' in locals() or 'df' in globals():
+        st.write("Columns found in your file:", list(df.columns))
