@@ -36,8 +36,8 @@ try:
 
     # --- Charts ---
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=data['Date'], y=data['FII_Net_Purchase_Sales'], name="FII Net", line=dict(color='#00f2ff')))
-    fig.add_trace(go.Scatter(x=data['Date'], y=data['DII_Net_Purchase_Sales'], name="DII Net", line=dict(color='#ff4b4b')))
+    fig.add_trace(go.Scatter(x=data['DATE'], y=data['FII_Net_Purchase_Sales'], name="FII Net", line=dict(color='#00f2ff')))
+    fig.add_trace(go.Scatter(x=data['DATE'], y=data['DII_Net_Purchase_Sales'], name="DII Net", line=dict(color='#ff4b4b')))
     fig.add_trace(go.Bar(x=data['Date'], y=data['Total_Net'], name="Total Net Inflow", opacity=0.3))
 
     fig.update_layout(title="Daily Institutional Flows", xaxis_title="Year", yaxis_title="Amount (Cr)", hovermode="x unified")
