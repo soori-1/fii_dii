@@ -14,7 +14,7 @@ def load_data():
     df = pd.read_csv('fii_dii_checkpoint.csv', encoding='cp1252')
     
     # Convert dates and clean numeric columns
-    df['Date'] = pd.to_datetime(df['Date'])
+    df['DATE'] = pd.to_datetime(df['DATE'])
     cols_to_fix = ['FII_Net_Purchase_Sales', 'DII_Net_Purchase_Sales']
     for col in cols_to_fix:
         df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
