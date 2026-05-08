@@ -12,7 +12,7 @@ st.subheader("FII & DII Net Inflow Analysis")
 @st.cache_data(ttl=3600)
 def load_data():
     # 1. Load with encoding fix
-    df = pd.read_csv('fii_dii_chechpoint.csv', encoding='cp1252')
+    df = pd.read_csv('fii_dii_checkpoint.csv', encoding='cp1252')
     
     # 2. Clean Column Names (The "Secret Sauce")
     # This turns '  Date ' or 'date' into 'DATE'
