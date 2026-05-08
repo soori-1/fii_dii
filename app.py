@@ -9,19 +9,29 @@ st.title("📊 Institutional Equity Flows (2014 - Present)")
 st.subheader("FII & DII Net Inflow Analysis")
 
 # Load Data
-@st.cache_data(ttl=3600) # Refreshes every hour
+@st.cache_data(ttl=3600)
 def load_data():
-    df = pd.read_csv('fii_dii_checkpoint.csv', encoding='cp1252')
+    # 1. Load with encoding fix
+    df = pd.read_csv('FII_DII_Daily_Data_2014_to_Today.csv', encoding='cp1252')
     
-    # Convert dates and clean numeric columns
+    # 2. Clean Column Names (The "Secret Sauce")
+    # This turns '  Date ' or 'date' into 'DATE'
+    df.columns = df.columns.str.strip().str.upper()
+    
+    # 3. Convert Date
+    # We now look for 'DATE' because we capitalized everything above
     df['DATE'] = pd.to_datetime(df['DATE'])
-    cols_to_fix = ['FII_Net_Purchase_Sales', 'DII_Net_Purchase_Sales']
-    for col in cols_to_fix:
-        df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
     
-    # Calculate Total Net Inflow
-    # $$\text{Total Net Inflow} = \text{FII Net} + \text{DII Net}$$
-    df['Total_Net'] = df['FII_Net_Purchase_Sales'] + df['DII_Net_Purchase_Sales']
+    # 4. Clean Numeric Columns
+    # Adjust names here to match the capitalized version
+    cols_to_fix = ['FII_NET_PURCHASE_SALES', 'DII_NET_PURCHASE_SALES']
+    for col in cols_to_fix:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
+    
+    # 5. Calculate Total
+    df['TOTAL_NET'] = df['FII_NET_PURCHASE_SALES'] + df['DII_NET_PURCHASE_SALES']
+    
     return df.sort_values('DATE')
 
 try:
