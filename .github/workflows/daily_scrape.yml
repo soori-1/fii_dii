@@ -1,0 +1,34 @@
+name: Daily FII DII Scrape
+
+on:
+  schedule:
+    - cron: '30 14 * * *' # Runs at 8:00 PM IST daily
+  workflow_dispatch: # Allows manual run
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install playwright pandas
+          playwright install chromium
+
+      - name: Run Scraper
+        run: python scraper.py # Ensure your scraper filename matches
+
+      - name: Commit and Push changes
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add FII_DII_Daily_Data_2014_to_Today.csv
+          git commit -m "Auto-update FII/DII data" || exit 0
+          git push
