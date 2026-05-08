@@ -10,7 +10,7 @@ st.title("📊 Institutional Equity Flows (2014 - Present)")
 def load_data():
     # 'utf-8-sig' handles the hidden characters (BOM) often found in Excel-made CSVs
     # If this fails, try 'cp1252'
-    df = pd.read_csv('fii_dii_checckpoint.csv', encoding='utf-8-sig')
+    df = pd.read_csv('fii_dii_checkpoint.csv', encoding='utf-8-sig')
     
     # Standardize column names: Strip spaces and make Uppercase
     df.columns = df.columns.str.strip().str.upper()
