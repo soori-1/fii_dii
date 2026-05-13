@@ -33,6 +33,6 @@ jobs:
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          git add FII_DII_Daily_Data_2014_to_Today.csv
+          git add fii_dii_checkpoint.csv
           git commit -m "Auto-update daily FII/DII data" || exit 0
           git push
