@@ -5,7 +5,7 @@ import os
 def main():
     new_data = []
     with sync_playwright() as p:
-        # 1. Use a standard Chrome User-Agent to prevent bot-blocking
+        # Use a standard Chrome User-Agent to prevent bot-blocking
         browser = p.chromium.launch(headless=True)
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
@@ -15,22 +15,44 @@ def main():
         print("Navigating to Trendlyne...")
         page.goto('https://trendlyne.com/macro-data/fii-dii/month/cash-month/', timeout=60000)
 
+        # 1. THE FIX: Wait for the table to actually render on the screen
+        try:
+            print("Waiting for data table to load...")
+            page.wait_for_selector('table tbody tr td:first-child a', timeout=15000)
+        except Exception as e:
+            print("Error: The table did not load in time. Trendlyne might be blocking the GitHub server.")
+            page.screenshot(path="debug_error.png")
+            print("Saved screenshot to 'debug_error.png' to see what the bot is seeing.")
+            browser.close()
+            return
+
         # Gather month links
         month_links = page.evaluate('''() => {
             const rows = Array.from(document.querySelectorAll('table tbody tr td:first-child a'));
             return rows.map(a => ({ text: a.innerText.trim(), href: a.href }));
         }''')
 
-        # 2. OPTIMIZATION: Only scrape the FIRST link (The Current Month)
+        # Check if we got links
+        if not month_links:
+            print("Failed to extract links even after waiting.")
+            browser.close()
+            return
+
+        # 2. Only scrape the FIRST link (The Current Month)
         latest_month = month_links[0]
         print(f"Scraping latest month: {latest_month['text']}")
         
         page.goto(latest_month['href'], timeout=60000)
 
-        cash_tab = page.locator('text="Cash Provisional"').first
-        if cash_tab.is_visible():
-            cash_tab.click()
-            page.wait_for_timeout(2000)
+        # Wait for the Cash Provisional tab to be ready
+        try:
+            page.wait_for_selector('text="Cash Provisional"', timeout=10000)
+            cash_tab = page.locator('text="Cash Provisional"').first
+            if cash_tab.is_visible():
+                cash_tab.click()
+                page.wait_for_timeout(2000) # Give it 2 seconds to switch tabs
+        except Exception as e:
+            print("Could not find or click the 'Cash Provisional' tab.")
 
         # Extract data exactly matching your CSV headers
         daily_data = page.evaluate('''() => {
@@ -50,7 +72,7 @@ def main():
         browser.close()
 
     if not new_data:
-        print("No data extracted from the page.")
+        print("No data extracted from the current month's page.")
         return
 
     # 3. MERGE WITH YOUR EXISTING CSV
@@ -82,6 +104,8 @@ def main():
         print("Successfully merged and saved.")
     else:
         print("CSV not found. Creating a new one...")
+        # For a brand new file, calculate the total net
+        df_new['Total_Net'] = pd.to_numeric(df_new['FII_Net_Purchase_Sales'].astype(str).str.replace(',', ''), errors='coerce') + pd.to_numeric(df_new['DII_Net_Purchase_Sales'].astype(str).str.replace(',', ''), errors='coerce')
         df_new.to_csv(csv_file, index=False, encoding='utf-8-sig')
 
 if __name__ == "__main__":
