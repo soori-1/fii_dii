@@ -6,25 +6,19 @@ import numpy as np
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Institutional Flow Analytics", layout="wide", page_icon="📈")
 
-st.title("FII and DII tracker")
+st.title("📈 Institutional Flow & Macro Analytics")
 st.markdown("Advanced structural tracking of FII & DII equity flows (2014 - Present)")
 
 # --- DATA LOADER ---
-# Temporarily lowered TTL to 60 seconds while we debug
 @st.cache_data(ttl=60)
 def load_data():
-    df = pd.read_csv('fii_dii_checkpoint.csv', encoding='utf-8-sig')
+    df = pd.read_csv('FII_DII_Daily_Data_2014_to_Today.csv', encoding='utf-8-sig')
     df.columns = df.columns.str.strip().str.upper()
     
-    # Store the raw row count before we start cleaning
     raw_rows = len(df)
     
-    # Advanced Date Parsing: Tells Pandas to expect mixed formats like '12-May-26' and '12-May-2026'
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter(action='ignore', category=UserWarning)
-        df['DATE'] = pd.to_datetime(df['DATE'], format='mixed', dayfirst=True, errors='coerce')
-    
+    # Robust date parsing for mixed formats
+    df['DATE'] = pd.to_datetime(df['DATE'], format='mixed', dayfirst=True, errors='coerce')
     df = df.dropna(subset=['DATE'])
     parsed_rows = len(df)
 
@@ -35,47 +29,52 @@ def load_data():
             df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
     
     df = df.sort_values('DATE').reset_index(drop=True)
-
-    # Moving Averages & Z-Score
-    df['FII_SMA_20'] = df['FII_NET_PURCHASE_SALES'].rolling(window=20).mean()
-    df['DII_SMA_20'] = df['DII_NET_PURCHASE_SALES'].rolling(window=20).mean()
-    df['TOTAL_SMA_20'] = df['TOTAL_NET'].rolling(window=20).mean()
-    fii_mean_60 = df['FII_NET_PURCHASE_SALES'].rolling(window=60).mean()
-    fii_std_60 = df['FII_NET_PURCHASE_SALES'].rolling(window=60).std()
-    df['FII_Z_SCORE'] = (df['FII_NET_PURCHASE_SALES'] - fii_mean_60) / fii_std_60
-    df['ABSORPTION_RATIO'] = np.where(df['FII_NET_PURCHASE_SALES'] < 0, abs(df['DII_NET_PURCHASE_SALES'] / df['FII_NET_PURCHASE_SALES']), np.nan)
-
     return df, raw_rows, parsed_rows
 
 try:
     data, raw_count, parsed_count = load_data()
 
-    # --- ADDED: DIAGNOSTIC SIDEBAR ---
+    # --- SIDEBAR DIAGNOSTICS ---
     with st.sidebar:
-        st.markdown("### 🛠️ Data Health Check")
+        st.markdown("### 🛠️ Data Settings")
+        # Feature 2: View Mode Selection
+        view_mode = st.radio("Select View Mode:", ["Daily View", "Monthly Aggregated"], index=0)
+        
+        st.markdown("---")
         st.write(f"**Rows in CSV:** {raw_count}")
         st.write(f"**Rows Plotted:** {parsed_count}")
-        if raw_count != parsed_count:
-            st.error(f"⚠️ {raw_count - parsed_count} rows were dropped because the date format couldn't be read.")
-        else:
-            st.success("✅ All data loaded perfectly.")
-            
-    # --- TOP METRICS DASHBOARD ---
-    st.markdown("### 📊 Latest Market Session")
-    latest = data.iloc[-1]
-    
-    # Format numbers cleanly
-    fii_net = latest['FII_NET_PURCHASE_SALES']
-    dii_net = latest['DII_NET_PURCHASE_SALES']
-    total_net = latest['TOTAL_NET']
-    
-    # Reduced to 3 columns since we removed Nifty 50
-    col1, col2, col3 = st.columns(3)
-    col1.metric("FII Net Flow", f"₹{fii_net:,.2f} Cr")
-    col2.metric("DII Net Flow", f"₹{dii_net:,.2f} Cr")
-    col3.metric("Total Net Inflow", f"₹{total_net:,.2f} Cr")
 
-    st.markdown("---")
+    # --- DATA PROCESSING FOR VIEWS ---
+    if view_mode == "Monthly Aggregated":
+        # Aggregate by Month-Year and sum the flows
+        plot_df = data.set_index('DATE').resample('ME').sum().reset_index()
+        # Format date for cleaner x-axis labels in monthly view
+        plot_df['DISPLAY_DATE'] = plot_df['DATE'].dt.strftime('%b %Y')
+        sma_window = 3 # 3-month average for monthly view
+    else:
+        plot_df = data.copy()
+        # Format date for daily view
+        plot_df['DISPLAY_DATE'] = plot_df['DATE'].dt.strftime('%d %b %y')
+        sma_window = 20 # 20-day average for daily view
+
+    # Calculate SMAs on the processed dataframe
+    plot_df['FII_SMA'] = plot_df['FII_NET_PURCHASE_SALES'].rolling(window=sma_window).mean()
+    plot_df['DII_SMA'] = plot_df['DII_NET_PURCHASE_SALES'].rolling(window=sma_window).mean()
+    plot_df['TOTAL_SMA'] = plot_df['TOTAL_NET'].rolling(window=sma_window).mean()
+    
+    # Statistical Calcs (Z-Score)
+    fii_mean = plot_df['FII_NET_PURCHASE_SALES'].rolling(window=60).mean()
+    fii_std = plot_df['FII_NET_PURCHASE_SALES'].rolling(window=60).std()
+    plot_df['FII_Z_SCORE'] = (plot_df['FII_NET_PURCHASE_SALES'] - fii_mean) / fii_std
+    plot_df['ABSORPTION_RATIO'] = np.where(plot_df['FII_NET_PURCHASE_SALES'] < 0, abs(plot_df['DII_NET_PURCHASE_SALES'] / plot_df['FII_NET_PURCHASE_SALES']), np.nan)
+
+    # --- TOP METRICS ---
+    st.markdown(f"### 📊 Latest {view_mode} Summary")
+    latest = plot_df.iloc[-1]
+    col1, col2, col3 = st.columns(3)
+    col1.metric("FII Net", f"₹{latest['FII_NET_PURCHASE_SALES']:,.2f} Cr")
+    col2.metric("DII Net", f"₹{latest['DII_NET_PURCHASE_SALES']:,.2f} Cr")
+    col3.metric("Total Net", f"₹{latest['TOTAL_NET']:,.2f} Cr")
 
     # --- TIMEFRAME SELECTOR ---
     timeframes = {
@@ -85,78 +84,83 @@ try:
         "1 Year": pd.DateOffset(years=1),
         "3 Years": pd.DateOffset(years=3),
         "5 Years": pd.DateOffset(years=5),
-        "Max (2014-Now)": None
+        "Max": None
     }
-    
-    selected_tf = st.radio("Select Analytical Timeframe:", options=list(timeframes.keys()), horizontal=True, index=3)
+    selected_tf = st.radio("Select Timeframe:", options=list(timeframes.keys()), horizontal=True, index=3)
 
-    # Filter data
     if timeframes[selected_tf] is not None:
-        cutoff_date = data['DATE'].max() - timeframes[selected_tf]
-        filtered_data = data[data['DATE'] >= cutoff_date]
+        cutoff = plot_df['DATE'].max() - timeframes[selected_tf]
+        filtered_df = plot_df[plot_df['DATE'] >= cutoff]
     else:
-        filtered_data = data
+        filtered_df = plot_df
 
-    # --- TABS FOR ORGANIZATION ---
-    # Down to just two tabs
-    tab1, tab2 = st.tabs(["📉 Trend & Averages", "⚡ Statistical Extremes (Z-Score)"])
+    # --- TABS ---
+    tab1, tab2 = st.tabs(["📉 Trend & Averages", "⚡ Statistical Extremes"])
 
-    # === TAB 1: TRENDS & AVERAGES ===
     with tab1:
-        st.markdown("#### Moving Average Flow Analysis")
-        st.caption("Displays raw daily flows with a 20-Day Simple Moving Average (SMA) to identify accelerating institutional support or distribution.")
-        
+        # Feature 1: chart function with Gap Removal (type='category')
         def create_trend_chart(df, y_col, sma_col, title, color):
             fig = go.Figure()
-            # Daily Bars
-            fig.add_trace(go.Bar(x=df['DATE'], y=df[y_col], name="Daily Flow", marker_color=color, opacity=0.4))
-            # 20-Day SMA Line
-            fig.add_trace(go.Scatter(x=df['DATE'], y=df[sma_col], mode='lines', name="20-Day SMA", line=dict(color=color, width=3)))
+            # Daily/Monthly Bars
+            fig.add_trace(go.Bar(
+                x=df['DISPLAY_DATE'], 
+                y=df[y_col], 
+                name="Net Flow", 
+                marker_color=color, 
+                opacity=0.4
+            ))
+            # Average Line
+            fig.add_trace(go.Scatter(
+                x=df['DISPLAY_DATE'], 
+                y=df[sma_col], 
+                mode='lines', 
+                name=f"{sma_window} Period Avg", 
+                line=dict(color=color, width=3)
+            ))
             
-            fig.update_layout(title=title, hovermode="x unified", template="plotly_dark", height=350, margin=dict(b=0))
+            fig.update_layout(
+                title=title, 
+                hovermode="x unified", 
+                template="plotly_dark", 
+                height=350,
+                xaxis=dict(
+                    type='category', # THIS REMOVES THE SPACES (WEEKENDS/HOLIDAYS)
+                    categoryorder='array',
+                    categoryarray=df['DISPLAY_DATE'],
+                    nticks=20 # Keeps the axis readable
+                )
+            )
             return fig
 
-        st.plotly_chart(create_trend_chart(filtered_data, 'FII_NET_PURCHASE_SALES', 'FII_SMA_20', 'FII Flows vs 20-Day SMA', '#00f2ff'), use_container_width=True)
-        st.plotly_chart(create_trend_chart(filtered_data, 'DII_NET_PURCHASE_SALES', 'DII_SMA_20', 'DII Flows vs 20-Day SMA', '#ff4b4b'), use_container_width=True)
-        st.plotly_chart(create_trend_chart(filtered_data, 'TOTAL_NET', 'TOTAL_SMA_20', 'Combined Total Net Flows vs 20-Day SMA', '#00ff88'), use_container_width=True)
+        st.plotly_chart(create_trend_chart(filtered_df, 'FII_NET_PURCHASE_SALES', 'FII_SMA', 'FII Flows', '#00f2ff'), use_container_width=True)
+        st.plotly_chart(create_trend_chart(filtered_df, 'DII_NET_PURCHASE_SALES', 'DII_SMA', 'DII Flows', '#ff4b4b'), use_container_width=True)
+        st.plotly_chart(create_trend_chart(filtered_df, 'TOTAL_NET', 'TOTAL_SMA', 'Combined Total Flows', '#00ff88'), use_container_width=True)
 
-
-    # === TAB 2: STATISTICAL EXTREMES ===
     with tab2:
+        # Z-Score and Absorption Charts using the same filtered_df and category axis
         st.markdown("#### Flow Extremes & Market Absorption")
-        st.caption("A Z-Score of > 2 or < -2 indicates a statistically extreme buying/selling day. Absorption ratio > 1 means DIIs bought more than FIIs sold.")
-        
         c1, c2 = st.columns(2)
         with c1:
-            # Z-Score Chart
             fig_z = go.Figure()
             fig_z.add_trace(go.Bar(
-                x=filtered_data['DATE'], y=filtered_data['FII_Z_SCORE'],
-                name="FII Z-Score", marker_color=np.where(filtered_data['FII_Z_SCORE'] > 0, '#00f2ff', '#ff4b4b')
+                x=filtered_df['DISPLAY_DATE'], y=filtered_df['FII_Z_SCORE'],
+                name="FII Z-Score", marker_color=np.where(filtered_df['FII_Z_SCORE'] > 0, '#00f2ff', '#ff4b4b')
             ))
-            # Add +2 and -2 Standard Deviation Lines
-            fig_z.add_hline(y=2, line_dash="dash", line_color="red", annotation_text="+2 Std Dev (Euphoria)")
-            fig_z.add_hline(y=-2, line_dash="dash", line_color="green", annotation_text="-2 Std Dev (Panic/Climax)")
-            fig_z.update_layout(title="FII Flow Volatility (Z-Score)", template="plotly_dark", height=400)
+            fig_z.add_hline(y=2, line_dash="dash", line_color="red")
+            fig_z.add_hline(y=-2, line_dash="dash", line_color="green")
+            fig_z.update_layout(title="FII Z-Score (Volatility)", template="plotly_dark", xaxis=dict(type='category', nticks=10))
             st.plotly_chart(fig_z, use_container_width=True)
 
         with c2:
-            # Absorption Scatter
+            sell_days = filtered_df[filtered_df['FII_NET_PURCHASE_SALES'] < 0]
             fig_abs = go.Figure()
-            # Only plot days where FII sold
-            sell_days = filtered_data[filtered_data['FII_NET_PURCHASE_SALES'] < 0]
             fig_abs.add_trace(go.Scatter(
-                x=sell_days['DATE'], y=sell_days['ABSORPTION_RATIO'],
-                mode='markers', name="Absorption Ratio",
-                marker=dict(size=6, color=np.where(sell_days['ABSORPTION_RATIO'] > 1, '#00ff88', 'gray'))
+                x=sell_days['DISPLAY_DATE'], y=sell_days['ABSORPTION_RATIO'],
+                mode='markers', marker=dict(size=8, color=np.where(sell_days['ABSORPTION_RATIO'] > 1, '#00ff88', 'gray'))
             ))
-            fig_abs.add_hline(y=1, line_dash="dot", line_color="white", annotation_text="1.0 (Full Absorption)")
-            fig_abs.update_layout(title="DII Absorption Ratio (On FII Sell Days)", template="plotly_dark", height=400, yaxis=dict(range=[0, 3]))
+            fig_abs.add_hline(y=1, line_dash="dot", line_color="white")
+            fig_abs.update_layout(title="DII Absorption Ratio", template="plotly_dark", yaxis=dict(range=[0, 3]), xaxis=dict(type='category', nticks=10))
             st.plotly_chart(fig_abs, use_container_width=True)
 
-    st.markdown("---")
-    with st.expander("View Underlying Data Structure"):
-        st.dataframe(filtered_data.sort_values('DATE', ascending=False), use_container_width=True)
-
 except Exception as e:
-    st.error(f"Error loading systems: {e}")
+    st.error(f"Error in system execution: {e}")
