@@ -2,20 +2,24 @@ name: Daily FII DII Scrape
 
 on:
   schedule:
-    - cron: '30 14 * * *' 
-  workflow_dispatch: 
+    - cron: '30 14 * * *' # 8:00 PM IST
+  workflow_dispatch: # Allows manual run button
+
+# THIS IS THE CRITICAL FIX FOR PUSHING DATA
+permissions:
+  contents: write 
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4 # Updated from v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5 # Updated from v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # Using a more modern Python for 2026
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
@@ -30,5 +34,5 @@ jobs:
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
           git add FII_DII_Daily_Data_2014_to_Today.csv
-          git commit -m "Auto-update FII/DII data" || exit 0
+          git commit -m "Auto-update daily FII/DII data" || exit 0
           git push
