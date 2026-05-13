@@ -10,13 +10,23 @@ st.title("FII and DII tracker")
 st.markdown("Advanced structural tracking of FII & DII equity flows (2014 - Present)")
 
 # --- DATA LOADER ---
-@st.cache_data(ttl=3600)
+# Temporarily lowered TTL to 60 seconds while we debug
+@st.cache_data(ttl=60)
 def load_data():
-    # 1. Load FII/DII CSV
-    df = pd.read_csv('fii_dii_checkpoint.csv', encoding='utf-8-sig')
+    df = pd.read_csv('FII_DII_Daily_Data_2014_to_Today.csv', encoding='utf-8-sig')
     df.columns = df.columns.str.strip().str.upper()
-    df['DATE'] = pd.to_datetime(df['DATE'], errors='coerce')
+    
+    # Store the raw row count before we start cleaning
+    raw_rows = len(df)
+    
+    # Advanced Date Parsing: Tells Pandas to expect mixed formats like '12-May-26' and '12-May-2026'
+    import warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter(action='ignore', category=UserWarning)
+        df['DATE'] = pd.to_datetime(df['DATE'], format='mixed', dayfirst=True, errors='coerce')
+    
     df = df.dropna(subset=['DATE'])
+    parsed_rows = len(df)
 
     # Clean numeric columns
     cols = ['FII_NET_PURCHASE_SALES', 'DII_NET_PURCHASE_SALES', 'TOTAL_NET']
@@ -24,32 +34,32 @@ def load_data():
         if col in df.columns:
             df[col] = pd.to_numeric(df[col].astype(str).str.replace(',', ''), errors='coerce')
     
-    # Sort chronologically for accurate rolling calculations
     df = df.sort_values('DATE').reset_index(drop=True)
 
-    # 2. Advanced CMT Calculations
-    # Moving Averages
+    # Moving Averages & Z-Score
     df['FII_SMA_20'] = df['FII_NET_PURCHASE_SALES'].rolling(window=20).mean()
     df['DII_SMA_20'] = df['DII_NET_PURCHASE_SALES'].rolling(window=20).mean()
     df['TOTAL_SMA_20'] = df['TOTAL_NET'].rolling(window=20).mean()
-    
-    # Z-Score (Standard Deviation from 60-day mean) to find extreme panic/euphoria
     fii_mean_60 = df['FII_NET_PURCHASE_SALES'].rolling(window=60).mean()
     fii_std_60 = df['FII_NET_PURCHASE_SALES'].rolling(window=60).std()
     df['FII_Z_SCORE'] = (df['FII_NET_PURCHASE_SALES'] - fii_mean_60) / fii_std_60
+    df['ABSORPTION_RATIO'] = np.where(df['FII_NET_PURCHASE_SALES'] < 0, abs(df['DII_NET_PURCHASE_SALES'] / df['FII_NET_PURCHASE_SALES']), np.nan)
 
-    # Absorption Ratio (DII Buying / FII Selling). Only calculate when FII is selling.
-    df['ABSORPTION_RATIO'] = np.where(
-        df['FII_NET_PURCHASE_SALES'] < 0, 
-        abs(df['DII_NET_PURCHASE_SALES'] / df['FII_NET_PURCHASE_SALES']), 
-        np.nan
-    )
-
-    return df
+    return df, raw_rows, parsed_rows
 
 try:
-    data = load_data()
+    data, raw_count, parsed_count = load_data()
 
+    # --- ADDED: DIAGNOSTIC SIDEBAR ---
+    with st.sidebar:
+        st.markdown("### 🛠️ Data Health Check")
+        st.write(f"**Rows in CSV:** {raw_count}")
+        st.write(f"**Rows Plotted:** {parsed_count}")
+        if raw_count != parsed_count:
+            st.error(f"⚠️ {raw_count - parsed_count} rows were dropped because the date format couldn't be read.")
+        else:
+            st.success("✅ All data loaded perfectly.")
+            
     # --- TOP METRICS DASHBOARD ---
     st.markdown("### 📊 Latest Market Session")
     latest = data.iloc[-1]
