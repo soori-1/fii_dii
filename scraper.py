@@ -76,7 +76,7 @@ def main():
         return
 
     # 3. MERGE WITH YOUR EXISTING CSV
-    csv_file = 'FII_DII_Daily_Data_2014_to_Today.csv'
+    csv_file = 'fii_dii_checkpoint.csv'
     df_new = pd.DataFrame(new_data)
     
     if os.path.exists(csv_file):
